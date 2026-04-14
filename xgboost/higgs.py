@@ -27,8 +27,8 @@ def train_and_test(filename, param, num_round, nthread):
 param = {'max_depth': 9, 'eta': 0.03, 'objective': 'binary:logistic'}
 
 # Start two threads to train the models
-thread1 = threading.Thread(target=train_and_test, args=('/users/YuqiLi/HIGGS.csv', param, 245, 1))
-thread2 = threading.Thread(target=train_and_test, args=('/users/YuqiLi/SUSY.csv', param, 500, 1))
+thread1 = threading.Thread(target=train_and_test, args=('/mydata/HIGGS.csv', param, 245, 1))
+thread2 = threading.Thread(target=train_and_test, args=('/mydata/SUSY.csv', param, 500, 1))
 
 thread1.start()
 thread2.start()

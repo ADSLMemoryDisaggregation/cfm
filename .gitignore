@@ -2,3 +2,4 @@
 *.snappy
 *.pyc
 enwiki-*
+.codex

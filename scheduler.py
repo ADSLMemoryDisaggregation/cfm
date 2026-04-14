@@ -450,12 +450,14 @@ def generate_filename(args):
         policy = "uniform"
     elif args.optimal:
         policy = "optimal"
+    elif args.random:
+        policy = "random"
     else:
         policy = "variable"
 
     filename = 'cpus_{}_mem_{}_size_{}'
     filename = filename.format(cpus, mem, size)
-    if args.uniform_ratio != None:
+    if args.uniform_ratio:
         filename += '_uniform_ratio_{}'.format(args.uniform_ratio)
 
     filename += '_policy_{}'.format(policy)
@@ -471,13 +473,16 @@ def check_args(args):
         assert(not args.uniform_ratio), "uniform_ratio must be used with remote memory"
         assert(not args.variable_ratios), "variable_ratio must be used with remote memory"
         assert(not args.optimal), "optimal must be used with remote memory"
+        assert(not args.random), "random must be used with remote memory"
     else:
-        # No two of these three can be active simultaneously
-        uniform, variable, optimal = map(bool, (args.uniform_ratio, args.variable_ratios, args.optimal))
-        print(uniform, variable, optimal)
-        assert(uniform ^ variable ^ optimal),\
+        # Exactly one shrinking policy can be active at a time.
+        uniform, variable, optimal, random_policy = map(
+            bool, (args.uniform_ratio, args.variable_ratios, args.optimal, args.random)
+        )
+        print(uniform, variable, optimal, random_policy)
+        assert(sum((uniform, variable, optimal, random_policy)) == 1),\
                ("You must specify one (and only one) of the following options: "
-                "uniform_ratio, variable_ratio.")
+                "uniform_ratio, variable_ratio, optimal, random.")
 
 
 def main():
@@ -518,6 +523,8 @@ def main():
                         default=0)
     parser.add_argument('--optimal', '-o', action='store_true',
                         help='Use the optimal algorithm')
+    parser.add_argument('--random', action='store_true',
+                        help='Use the random shrinking policy')
 
     cmdargs = parser.parse_args()
 

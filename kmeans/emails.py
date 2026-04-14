@@ -3,7 +3,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
-file_path = "/mydata/dataset/emails.csv"  
+file_path = "/mydata/emails.csv"  
 data = pd.read_csv(file_path)
 
 print(data.head())

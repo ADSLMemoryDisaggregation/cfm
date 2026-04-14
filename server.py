@@ -6,6 +6,7 @@ import time
 import logging
 import argparse
 import socket
+import random
 from tensorflow.python.framework import test_util
 
 import multiprocessing
@@ -108,6 +109,7 @@ class Machine:
         # State for calculating percents
         self.last_time = 0
         self.slow_downs = {}
+        self.random_policy = False
         for wname in ['quicksort', 'snappy', 'redis', 'xgboost', 'pagerank', 'xsbench']:
             self.slow_downs[wname] = 1
 
@@ -140,6 +142,9 @@ class Machine:
         self.reclaimer_cpu = self.total_cpus - 1
 
         self.optimal = optimal
+        self.random_policy = bool(
+            self.remote_mem and not self.uniform_ratio and not self.variable_ratios and not self.optimal
+        )
 
         if self.remote_mem:
             try:
@@ -267,6 +272,8 @@ class Machine:
             elif self.optimal:
                 self.shrink_all_optimally(all_workloads, idd)
                 self.last_time = time.time() * 1000 # to ms
+            elif self.random_policy:
+                self.shrink_all_randomly(all_workloads, idd)
             else:
                 self.shrink_all_proportionally(all_workloads)
 
@@ -346,6 +353,82 @@ class Machine:
             ratio = (w.ideal_mem - share_of_excess) / w.ideal_mem
             w.modify_ratio(ratio)
 
+    def get_random_rng(self, workloads, new_idd=None):
+        seed = 1469598103934665603
+        for workload in sorted(workloads, key=lambda w: w.idd):
+            seed ^= (workload.idd + 1) * 1099511628211
+            seed ^= int(workload.ideal_mem)
+            seed ^= int(workload.min_mem) << 1
+        if new_idd is not None:
+            seed ^= (new_idd + 1) << 7
+        seed ^= int(self.total_mem) << 17
+        seed ^= len(workloads) << 23
+        return random.Random(seed)
+
+    def pick_random_shrinkages(self, total_shrink, capacities, rng):
+        shrinkages = [0.0 for _ in capacities]
+        remaining_caps = [float(capacity) for capacity in capacities]
+        remaining = float(total_shrink)
+        active = {idx for idx, capacity in enumerate(remaining_caps) if capacity > 0}
+
+        while remaining > 1e-6 and active:
+            weights = {idx: rng.random() + 1e-9 for idx in active}
+            weight_sum = sum(weights.values())
+            tentative = {
+                idx: remaining * weights[idx] / weight_sum
+                for idx in active
+            }
+            saturated = [idx for idx, share in tentative.items() if share >= remaining_caps[idx] - 1e-9]
+
+            if saturated:
+                for idx in saturated:
+                    shrinkages[idx] += remaining_caps[idx]
+                    remaining -= remaining_caps[idx]
+                    remaining_caps[idx] = 0.0
+                    active.remove(idx)
+                continue
+
+            for idx, share in tentative.items():
+                shrinkages[idx] += share
+                remaining_caps[idx] -= share
+            remaining = 0.0
+
+        if remaining > 1e-6:
+            for idx, capacity in enumerate(remaining_caps):
+                if capacity <= 0:
+                    continue
+                taken = min(capacity, remaining)
+                shrinkages[idx] += taken
+                remaining -= taken
+                if remaining <= 1e-6:
+                    break
+
+        return shrinkages
+
+    def shrink_all_randomly(self, workloads, new_idd=None):
+        assert self.min_mem_sum <= self.total_mem
+
+        total_ideal_mem = sum([w.ideal_mem for w in workloads])
+        excess_mem = max(0, total_ideal_mem - self.total_mem)
+
+        if excess_mem <= 0:
+            for workload in workloads:
+                workload.ratio = 1
+                workload.modify_ratio(1)
+            return
+
+        capacities = [w.ideal_mem - w.min_mem for w in workloads]
+        assert sum(capacities) + 1e-6 >= excess_mem
+
+        rng = self.get_random_rng(workloads, new_idd)
+        shrinkages = self.pick_random_shrinkages(excess_mem, capacities, rng)
+
+        for workload, shrinkage in zip(workloads, shrinkages):
+            ratio = (workload.ideal_mem - shrinkage) / workload.ideal_mem
+            ratio = max(workload.min_ratio, min(1, ratio))
+            workload.ratio = ratio
+            workload.modify_ratio(ratio)
+
     def shrink_all_optimally(self, workloads, new_idd=None):
         total_ideal_mem = sum([w.ideal_mem for w in workloads])
         total_min_mem = sum([w.min_mem for w in workloads])
@@ -381,7 +464,13 @@ class Machine:
     def compute_opt_ratios(self, workloads, init_ratios, new_idd):
         el_time = time.time()*1000 - self.last_time
         ideal_mems = np.array([w.ideal_mem for w in workloads])
-        percents = np.array([(1-(w.idd==new_idd))*min( (w.percent+el_time/w.profile(w.ratio))/self.slow_downs[w.wname], 0.95) for w in workloads])
+        percents = np.array([
+            (1 - (w.idd == new_idd)) * min(
+                (w.percent + el_time / w.profile(w.ratio)) / self.slow_downs.get(w.wname, 1),
+                0.95,
+            )
+            for w in workloads
+        ])
         profiles = [w.profile for w in workloads]
         mem_gradients = [w.mem_gradient for w in workloads]
         gradients = [w.gradient for w in workloads]
@@ -415,11 +504,12 @@ class Machine:
                 self.executing.remove(workload)
                 new_finished.append(workload)
                 
-                # adjust percents
-                el_time = time.time()*1000 - self.last_time
-                final_percent = workload.percent + el_time/workload.profile(workload.ratio)
-                if workload.wname in self.slow_downs:
-                    self.slow_downs[workload.wname] = 0.05*final_percent + 0.95*self.slow_downs[workload.wname]
+                if self.optimal:
+                    # Only the optimal policy tracks progress with workload coeffs.
+                    el_time = time.time()*1000 - self.last_time
+                    final_percent = workload.percent + el_time/workload.profile(workload.ratio)
+                    prev_slowdown = self.slow_downs.get(workload.wname, 1)
+                    self.slow_downs[workload.wname] = 0.05*final_percent + 0.95*prev_slowdown
                     logging.info('{} new slow down is {}'.format(workload.wname,self.slow_downs[workload.wname]))
         self.finished.extend(new_finished)
 
@@ -431,6 +521,8 @@ class Machine:
                 elif self.optimal:
                     self.shrink_all_optimally(self.executing, None)
                     self.last_time = time.time()*1000
+                elif self.random_policy:
+                    self.shrink_all_randomly(self.executing, None)
                 else:
                     self.shrink_all_proportionally(self.executing)
 

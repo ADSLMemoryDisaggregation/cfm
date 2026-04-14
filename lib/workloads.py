@@ -22,6 +22,7 @@ class Workload:
     ideal_mem = None
     min_ratio = None
     cpu_req = None
+    coeff = None
 
     def __init__(self, idd, pinned_cpus, mem_ratio=1):
 
@@ -52,7 +53,10 @@ class Workload:
         # Getting gradient coeffs ready
         self.percent = 0
         self.ratio = 1
-        self.get_gradient()
+        self.gd_coeff = None
+        self.mem_gd_coeff = None
+        if self.coeff is not None:
+            self.get_gradient()
 
     def __exec(self):
         " execute in self.thread "
@@ -116,7 +120,18 @@ class Workload:
     def update_percent(self, el_time):
         self.percent = self.percent + el_time/self.profile(self.ratio)
 
+    def require_coeffs(self):
+        if self.coeff is None:
+            raise RuntimeError(
+                "{} requires coeff profiling when using the optimal shrinking policy".format(
+                    self.wname
+                )
+            )
+        if self.gd_coeff is None or self.mem_gd_coeff is None:
+            self.get_gradient()
+
     def profile(self,ratio): 
+        self.require_coeffs()
         return self.compute_ratio_from_coeff(self.coeff, ratio)*1000 # from second to millisecond
 
     def get_gradient(self):
@@ -125,9 +140,11 @@ class Workload:
         self.mem_gd_coeff = np.polyder(tmp_coeff)
 
     def gradient(self, ratio):
+        self.require_coeffs()
         return self.compute_ratio_from_coeff(self.gd_coeff, ratio)
 
     def mem_gradient(self,ratio):
+        self.require_coeffs()
         return self.compute_ratio_from_coeff(self.mem_gd_coeff, ratio)
 
     def compute_ratio_from_coeff(self, coeffs, ratio):
