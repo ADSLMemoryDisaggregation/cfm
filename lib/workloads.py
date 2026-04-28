@@ -199,7 +199,7 @@ class LinearRegression(Workload):
 
 class RandomAccess(Workload):
     wname = "random_acccess"
-    ideal_mem = 33000
+    ideal_mem = 66000
     min_ratio = 0.1
     min_mem = int(min_ratio * ideal_mem)
     binary_name = "random_acccess"
@@ -216,7 +216,7 @@ class RandomAccess(Workload):
         print("pinned cpus are {}".format(pinned_cpus))
 
         prefix = "echo $$ > {} &&".format(procs_path)
-        arg = '8192'
+        arg = '16384'
         # arg = '64000'
         shell_cmd = '/usr/bin/time -v' + ' ' + constants.WORK_DIR + '/quicksort/random_access {}'.format(arg)
         #pinned_cpus_string = ','.join(map(str, pinned_cpus))
