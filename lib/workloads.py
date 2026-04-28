@@ -216,7 +216,7 @@ class RandomAccess(Workload):
         print("pinned cpus are {}".format(pinned_cpus))
 
         prefix = "echo $$ > {} &&".format(procs_path)
-        arg = '32768'
+        arg = '8192'
         # arg = '64000'
         shell_cmd = '/usr/bin/time -v' + ' ' + constants.WORK_DIR + '/quicksort/random_access {}'.format(arg)
         #pinned_cpus_string = ','.join(map(str, pinned_cpus))
