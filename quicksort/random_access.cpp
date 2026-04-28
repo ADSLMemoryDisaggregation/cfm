@@ -6,6 +6,7 @@
 #include <atomic>
 #include <random>
 #include <thread>
+#include <sys/mman.h>
 
 #define NUM_THREADS 32
 
@@ -54,9 +55,22 @@ void random_add(long numInts) {
 int main(int argc, char *argv[]) {
 	if (argc != 2)
 		die("need MB of integers to sort", false);
-
-	long size = std::stoi(argv[1]) * MB;
+    long raw_size = std::stoi(argv[1]) * MB;
+	void* fragment[raw_size / MB];
+    long size = raw_size / 4;
 	long numInts = size / sizeof(std::atomic<int>);
+
+    for(int i = 0; i < raw_size / MB; ++i) {
+        fragment[i] = mmap(NULL, MB, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+    }
+
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();  
+    std::mt19937 gen(seed);  
+    std::uniform_int_distribution<> dis(0, raw_size / MB - 1);
+    for(int i = 0; i < size / MB; ++i) {
+        int idx = dis(gen);
+        munmap(fragment[idx], MB);
+    }
 
 	std::cout << "will random access " << numInts << " integers (" << size / MB << " MB)\n";
 	//std::vector<std::atomic<int>> v(numInts);
