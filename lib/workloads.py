@@ -212,11 +212,12 @@ class RandomAccess(Workload):
         cpu_list = list(range(48))
         #cpu_list.extend(range(64, 96))
         #cpu_list.extend(range(32, 64))
-        pinned_cpus = ','.join(str(cpu_list[i]) for i in range(0,10))
+        pinned_cpus = ','.join(str(cpu_list[i]) for i in range(0,31))
         print("pinned cpus are {}".format(pinned_cpus))
 
         prefix = "echo $$ > {} &&".format(procs_path)
         arg = '32768'
+        # arg = '64000'
         shell_cmd = '/usr/bin/time -v' + ' ' + constants.WORK_DIR + '/quicksort/random_access {}'.format(arg)
         #pinned_cpus_string = ','.join(map(str, pinned_cpus))
         pinned_cpus_string = pinned_cpus
