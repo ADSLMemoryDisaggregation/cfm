@@ -199,7 +199,7 @@ class LinearRegression(Workload):
 
 class RandomAccess(Workload):
     wname = "random_acccess"
-    ideal_mem = 66000
+    ideal_mem = 65536
     min_ratio = 0.1
     min_mem = int(min_ratio * ideal_mem)
     binary_name = "random_acccess"
@@ -212,11 +212,11 @@ class RandomAccess(Workload):
         cpu_list = list(range(48))
         #cpu_list.extend(range(64, 96))
         #cpu_list.extend(range(32, 64))
-        pinned_cpus = ','.join(str(cpu_list[i]) for i in range(0,31))
+        pinned_cpus = ','.join(str(cpu_list[i]) for i in range(0,1))
         print("pinned cpus are {}".format(pinned_cpus))
 
         prefix = "echo $$ > {} &&".format(procs_path)
-        arg = '16384'
+        arg = '65536 30'
         # arg = '64000'
         shell_cmd = '/usr/bin/time -v' + ' ' + constants.WORK_DIR + '/quicksort/random_access {}'.format(arg)
         #pinned_cpus_string = ','.join(map(str, pinned_cpus))
@@ -346,6 +346,28 @@ class Pagerank(Workload):
         full_command = ' '.join((prefix, 'exec', set_cpu, shell_cmd))
         return full_command
 
+class Graph500(Workload):
+    wname = "graph500"
+    ideal_mem = 12000
+    min_ratio = 1
+    min_mem = int(min_ratio * ideal_mem)
+    binary_name = "graph500_reference_bfs"
+    cpu_req = 16
+    x = [1,      0.9,    0.8]
+    y = [221.06, 736.29, 99900000.00]
+    coeff = [-1617.416, 3789.953, -2993.734, 1225.477]
+    def get_cmdline(self, procs_path, pinned_cpus):
+        cpu_list = list(range(48))
+        pinned_cpus = ','.join(str(cpu_list[i]) for i in range(0,16))
+        print("pinned cpus are {}".format(pinned_cpus))
+
+        prefix = "echo $$ > {} &&".format(procs_path)
+        arg = '21'
+        shell_cmd = '/usr/bin/time -v' + ' mpirun -np 16 ' + constants.WORK_DIR + '/graph500/src/graph500_reference_bfs {}'.format(arg)
+        pinned_cpus_string = pinned_cpus
+        set_cpu = 'taskset -c {}'.format(pinned_cpus_string)
+        full_command = ' '.join((prefix, 'exec', set_cpu, shell_cmd))
+        return full_command
 
 class Memcached(Workload):
     wname = "memcached"

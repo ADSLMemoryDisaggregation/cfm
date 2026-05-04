@@ -13,7 +13,7 @@
 #include <cstring>
 #include <unistd.h>
 
-constexpr int NUM_THREADS = 32;
+constexpr int NUM_THREADS = 1;
 constexpr size_t DEFAULT_FRAGMENT_OCCUPIED_PERCENT = 75;
 constexpr size_t FRAGMENT_RELEASE_CHUNK_BYTES = 1 * 1024 * 1024;
 
